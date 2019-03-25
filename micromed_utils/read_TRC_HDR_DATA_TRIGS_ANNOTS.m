@@ -9,7 +9,8 @@
 
 
 %     Copyright (C) 2019 Matteo Demuru
-% 
+% 	  Copyright (C) 2019 Dorien van Blooijs
+
 %     This program is free software: you can redistribute it and/or modify
 %     it under the terms of the GNU General Public License as published by
 %     the Free Software Foundation, either version 3 of the License, or
@@ -115,12 +116,30 @@ end
 %---------ACQUISITION EQUIPMENT------------------------------
 fseek(f,134,-1);
 
-header.acquisition_eq=fread(f,1,'uint16');
+acquisition_eq=fread(f,1,'uint16');
+switch acquisition_eq
+    case 17
+        acquisition_eq = 'SD128';
+    case 40
+        acquisition_eq = 'LTM';
+    case 48
+        acquisition_eq = 'LTM64 Express';
+    case 49
+        acquisition_eq = 'LTM128 Express';
+end
+header.acquisition_eq = acquisition_eq;
+
 %---------FILE TYPE------------------------------
 
 fseek(f,136,-1);
 
-header.file_type=fread(f,1,'uint16');
+file_type=fread(f,1,'uint16');
+switch file_type
+    case 74
+        file_type = 'Common Reference, variable EEG, variable polygraphy';
+end
+header.file_type = file_type;
+
 %--------HEADER TYPE--------------
 % fseek(f,175,-1);
 % 
