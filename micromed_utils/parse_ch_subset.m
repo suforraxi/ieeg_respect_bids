@@ -36,7 +36,7 @@ if(strcmp(remain(1),'[') &&  strcmp(remain(end),']'))
         if(idx(k)<10) %check the zeros (01 or 1)  change with regexp
             test1=sprintf('%s%s',ch_name,int2str(idx(k)));
             test2=sprintf('%s0%s',ch_name,int2str(idx(k)));
-            if(sum(strcmp(test1,chs))>sum(strcmp(test2,chs)))
+            if(sum(strcmpi(test1,chs))>sum(strcmpi(test2,chs)))
                 ch_subset_str{k}=test1;
             else
                 ch_subset_str{k}=test2;
