@@ -7,7 +7,7 @@ function output = read_micromed_trc(filename, begsample, endsample)
 %--------------------------------------------------------------------------
 
 % ---------------- Opening File------------------
-fid=fopen(filename,'r');
+fid=fopen(filename,'rb');
 if fid==-1
   ft_error('Can''t open *.trc file')
 end
@@ -18,7 +18,7 @@ header.surname=char(fread(fid,22,'char'))';
 header.name=char(fread(fid,20,'char'))';
 
 fseek(fid,128,-1);
-day=fread(fid,1,'char');
+day=fread(fid,0,'uchar');
 if length(num2str(day))<2
   day=['0' num2str(day)];
 else
@@ -55,10 +55,29 @@ header.day=day;
 header.month=month;
 header.year=num2str(fread(fid,1,'char')+1900);
 
+fseek(fid,131,-1);
+header.hour = fread(fid,1,'char');
+if header.hour <10
+    header.hour = ['0' num2str(header.hour)];
+else
+    header.hour = num2str(header.hour);
+end
+
+header.min = fread(fid,1,'char');
+if header.min <10
+    header.min = ['0' num2str(header.min)];
+else
+    header.min = num2str(header.min);
+end
+    
+% acquisition type
+% fseek(fid,134,-1);
+% header.headbox = fread(fid,1,'ushort')
+
 %------------------ Reading Header Info ---------
 fseek(fid,175,-1);
-header.Header_Type=string(fread(fid,1,'uchar'));
-if ~strcmp(header.Header_Type,"4")
+header.Header_Type=string(fread(fid,1,'char'));
+if strcmp(header.Header_Type,"4")~=1
   ft_error('*.trc file is not Micromed System98 Header type 4')
 end
 
@@ -109,7 +128,7 @@ for iChan = 1 : header.Num_Chan
         case -1
             header.elec(iChan).Unit = 'nV';
         case 0
-            header.elec(iChan).Unit = 'uV';
+            header.elec(iChan).Unit = [char(181) 'V'];
         case 1
             header.elec(iChan).Unit = 'mV';
         case 2
@@ -123,11 +142,15 @@ for iChan = 1 : header.Num_Chan
     end
     % pre-filtering
     fseek(fid,ElecOff+128*vOrder(iChan)+36,'bof');
-    header.elec(iChan).Prefiltering_HiPass_Limit    = fread(fid,1,'ushort')*1000;%from specifications 
+    header.elec(iChan).Prefiltering_HiPass_Limit    = fread(fid,1,'ushort')/1000;%from specifications 
+    fseek(fid,ElecOff+128*vOrder(iChan)+38,'bof');
     header.elec(iChan).Prefiltering_HiPass_Type     = fread(fid,1,'ushort');
+    fseek(fid,ElecOff+128*vOrder(iChan)+40,'bof');
     header.elec(iChan).Prefiltering_LowPass_Limit   = fread(fid,1,'ushort');
+    fseek(fid,ElecOff+128*vOrder(iChan)+42,'bof');
     header.elec(iChan).Prefiltering_LowPass_Type    = fread(fid,1,'ushort');
-    
+     
+   
     
     fseek(fid,ElecOff+128*vOrder(iChan)+44,'bof');
     header.elec(iChan).FsCoeff = fread(fid,1,'ushort');
@@ -178,7 +201,7 @@ else
   for iElec = 1 : header.Num_Chan
          data(iElec,:) = ((data(iElec,:)-header.elec(iElec).LogicGnd)/(header.elec(iElec).LogicMax-header.elec(iElec).LogicMin+1)) ...
         *(header.elec(iElec).PhysMax-header.elec(iElec).PhysMin);
-  end;
+  end
   output = data;
   % FIXME why is this value of -32768 subtracted?
   % FIXME some sort of calibration should be applied to get it into microvolt
