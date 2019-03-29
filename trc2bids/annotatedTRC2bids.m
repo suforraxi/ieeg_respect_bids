@@ -120,7 +120,7 @@ try
         
         if contains([ieeg_files(:).name],ieeg_file)
             
-            delete(fullfile(ieeg_dir,[ieeg_file '*.tsv']))  ;
+            delete(fullfile(ieeg_dir,[ieeg_file '*.tsv']))  ; % TO FIX: this should not be removed when electrode positions are inserted! Be careful with this!
             delete(fullfile(ieeg_dir,[ieeg_file '*.json'])) ;
             delete(fullfile(ieeg_dir,[ieeg_file,'*.eeg']))  ;
             delete(fullfile(ieeg_dir,[ieeg_file,'*.vhdr'])) ;
@@ -153,12 +153,12 @@ try
         cfg = [];
         cfg.outputfile                  = fileVHDR;
         
-        cfg.anat.write     = 'no';
-        cfg.meg.write      = 'no';
-        cfg.eeg.write      = 'no';
-        cfg.ieeg.write     = 'no';
-        cfg.channels.write = 'yes';
-        cfg.events.write   = 'yes';
+        cfg.anat.writesidecar       = 'no';
+        cfg.meg.writesidecar        = 'no';
+        cfg.eeg.writesidecar        = 'no';
+        cfg.ieeg.writesidecar       = 'no';
+        cfg.channels.writesidecar   = 'no';
+        cfg.events.writesidecar     = 'no';
         
         data2bids(cfg, data2write)
         
@@ -268,9 +268,9 @@ if ~isempty(ddesc_json)
     else
         existing = [];
     end
-    %     write_json(filename, mergeconfig(existing, ddesc_json))
-    json_options.indent = ' ';
-    jsonwrite(filename, mergeconfig(existing, ddesc_json), json_options)
+    write_json(filename, mergeconfig(existing, ddesc_json))
+%     json_options.indent = ' ';
+%     jsonwrite(filename, mergeconfig(existing, ddesc_json), json_options)
 end
 
 %% create dataset descriptor
@@ -918,19 +918,21 @@ if ~isempty(trigger)
             
             for j=1:size(stimnums,2)
                 if str2double(stimnums{j})<10
-                    stimchan{j} = ch_label{contains(lower(ch_label),[stimchans{j},'0',num2str(str2double(stimnums{j}))])};
-                    stimnum(j) = find(contains(lower(ch_label),[stimchans{j}, '0',num2str(str2double(stimnums{j}))])==1);
+                    test1 = sprintf('%s%d',stimchans{j},str2double(stimnums{j}));
+                    test2 = sprintf('%s0%d',stimchans{j},str2double(stimnums{j}));
+                    if sum(strcmpi(test1,ch_label))>sum(strcmpi(test2,ch_label))
+                        stimchan{j} = ch_label{strcmpi(test1,ch_label)};
+                        stimnum(j) = find(strcmpi(test1,ch_label)==1);
+                    else
+                        stimchan{j} = ch_label{strcmpi(test2,ch_label)};
+                        stimnum(j) = find(strcmpi(test2,ch_label)==1);
+                    end
                 else
-                    stimchan{j} = ch_label{contains(lower(ch_label),[stimchans{j},num2str(str2double(stimnums{j}))])};
-                    stimnum(j) = find(contains(lower(ch_label),[stimchans{j}, num2str(str2double(stimnums{j}))])==1);
-                end
-                if isempty(stimchan{j})
-                    stimchan{j} = ch_label{contains(lower(ch_label),[stimchans{1},'0' num2str(str2double(stimnums{1}))])};
-                    stimchan{j} = ch_label{contains(lower(ch_label),[stimchans{2},'0' num2str(str2double(stimnums{2}))])};
-                    stimnum(j) = find(contains(lower(ch_label),[stimchans{1},'0' num2str(str2double(stimnums{1}))])==1);
-                    stimnum(j) = find(contains(lower(ch_label),[stimchans{2},'0' num2str(str2double(stimnums{2}))])==1);
-                end
-                
+                    test1 = sprintf('%s%d',stimchans{j},str2double(stimnums{j}));
+
+                    stimchan{j} = ch_label{strcmpi(test1,ch_label)};
+                    stimnum(j) = find(strcmpi(test1,ch_label)==1);
+                end                
             end
         elseif ~isempty(negannot) %there is no stimpair mentioned if it is a negative monophasic stimulus
             annotsplit = strsplit(annots_new{numannots-1,2},'_'); % finds info before '_'
@@ -939,19 +941,21 @@ if ~isempty(trigger)
             
             for j=1:size(stimnums,2)
                 if str2double(stimnums{j})<10
-                    stimchan{j} = ch_label{contains(lower(ch_label),[stimchans{j},'0',num2str(str2double(stimnums{j}))])};
-                    stimnum(j) = find(contains(lower(ch_label),[stimchans{j}, '0',num2str(str2double(stimnums{j}))])==1);
+                    test1 = sprintf('%s%d',stimchans{j},str2double(stimnums{j}));
+                    test2 = sprintf('%s0%d',stimchans{j},str2double(stimnums{j}));
+                    if sum(strcmpi(test1,ch_label))>sum(strcmpi(test2,ch_label))
+                        stimchan{j} = ch_label{strcmpi(test1,ch_label)};
+                        stimnum(j) = find(strcmpi(test1,ch_label)==1);
+                    else
+                        stimchan{j} = ch_label{strcmpi(test2,ch_label)};
+                        stimnum(j) = find(strcmpi(test2,ch_label)==1);
+                    end
                 else
-                    stimchan{j} = ch_label{contains(lower(ch_label),[stimchans{j},num2str(str2double(stimnums{j}))])};
-                    stimnum(j) = find(contains(lower(ch_label),[stimchans{j}, num2str(str2double(stimnums{j}))])==1);
-                end
-                if isempty(stimchan{j})
-                    stimchan{j} = ch_label{contains(lower(ch_label),[stimchans{1},'0' num2str(str2double(stimnums{1}))])};
-                    stimchan{j} = ch_label{contains(lower(ch_label),[stimchans{2},'0' num2str(str2double(stimnums{2}))])};
-                    stimnum(j) = find(contains(lower(ch_label),[stimchans{1},'0' num2str(str2double(stimnums{1}))])==1);
-                    stimnum(j) = find(contains(lower(ch_label),[stimchans{2},'0' num2str(str2double(stimnums{2}))])==1);
-                end
-                
+                    test1 = sprintf('%s%d',stimchans{j},str2double(stimnums{j}));
+
+                    stimchan{j} = ch_label{strcmpi(test1,ch_label)};
+                    stimnum(j) = find(strcmpi(test1,ch_label)==1);
+                end                   
             end
 
 %         else % if no stimpair is mentioned, stim pair is as in previous triggers
@@ -1555,17 +1559,17 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % SUBFUNCTION
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% function write_json(filename, json)
-% json = remove_empty(json);
-% ft_info('writing %s\n', filename);
-% if ft_hastoolbox('jsonlab', 3)
-%     savejson('', json, filename);
-% else
-%     str = jsonencode(json);
-%     fid = fopen(filename, 'w');
-%     fwrite(fid, str);
-%     fclose(fid);
-% end
+function write_json(filename, json)
+json = remove_empty(json);
+ft_info('writing %s\n', filename);
+if ft_hastoolbox('jsonlab', 3)
+    savejson('', json, filename);
+else
+    str = jsonencode(json);
+    fid = fopen(filename, 'w');
+    fwrite(fid, str);
+    fclose(fid);
+end
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % SUBFUNCTION
