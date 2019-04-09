@@ -42,10 +42,12 @@ for i=2:numel(C)
         if(contains(curr_str,'[')) %it is a ChannelSubset
             ch_subset_str=parse_ch_subset(curr_str,chs);
             ch2use(contains(chs,ch_subset_str,'IgnoreCase',true))=1;
+            if isempty(ch_subset_str)
+                error('Wrong annotation format for subset: %s',curr_str)
+            end
         else % ChannelName
              ch2use(contains(chs,curr_str,'IgnoreCase',true))=1;
         end
-
     else
         error('Wrong annotation format: %s',input_str)
     end
