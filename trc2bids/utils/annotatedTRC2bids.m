@@ -7,9 +7,6 @@
 %  output structure with some information about the subject
 %  output.subjName - name of the subject
 % 
-% 
-
-
 % The following functions rely and take inspiration on fieltrip data2bids.m  function
 % (https://github.com/fieldtrip/fieldtrip.git)
 % 
@@ -22,12 +19,10 @@
 % some external function to read micromed TRC files is used
 % https://github.com/fieldtrip/fieldtrip/blob/master/fileio/private/read_micromed_trc.m
 % copied in the external folder
-
-
-% 
 %  
 %     Copyright (C) 2019 Matteo Demuru
-% 
+%     Copyright (C) 2020 Willemiek Zweiphenning
+%   
 %     This program is free software: you can redistribute it and/or modify
 %     it under the terms of the GNU General Public License as published by
 %     the Free Software Foundation, either version 3 of the License, or
@@ -40,11 +35,8 @@
 % 
 %     You should have received a copy of the GNU General Public License
 %     along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-
-
  
-function [status,msg,output] = annotatedTRC2bids(cfg)
+function [status,msg,output] = annotatedTRC2bids(cfg,filenum)
 
 try
   
@@ -57,31 +49,30 @@ try
 
     proj_dir  = cfg.proj_dir;
     filename  = cfg.filename;
+    runall = cfg.runall;
 
     [indir,fname,exte] = fileparts(filename);
-    %create the subject level dir if not exist
-  
+    
+    % obtain information from the header of the trc-file
     [header,data,data_time,trigger,annots] = read_TRC_HDR_DATA_TRIGS_ANNOTS(filename);
     
     if(isempty(header) || isempty(data) || isempty(data_time) || isempty(trigger) || isempty(annots))
         error('TRC reading failed')  ;
     end 
-    ch_label = deblank({header.elec.Name}');
-    sub_label = strcat('sub-',upper(deblank(header.name)));
+    
+    ch_label = strtrim({header.elec.Name}'); %deblank({header.elec.Name}');
+    sub_label = strcat('sub-',strtrim(header.name));%strcat('sub-',upper(deblank(header.name)));
     
     output.subjName = sub_label;
     
     sfreq = header.Rate_Min;
     
-    [status,msg,metadata] = extract_metadata_from_annotations(annots,ch_label,trigger,sub_label,sfreq);
+    [status,msg,metadata] = extract_metadata_from_annotations(annots,ch_label,trigger,sub_label,sfreq,proj_dir);
     
     output.sitName = upper(replace(deblank(metadata.sit_name),' ',''));
     
     if(status==0)
         %% move trc with the proper naming and start to create the folder structure
-        % for now for simplicity using the .trc even though is not one of the
-        % allowed format (later it should be moved to source)
-
         %proj-dir/
         %   sub-<label>/
         %       ses-<label>/
@@ -95,13 +86,15 @@ try
         %               
         %               sub-<label>_ses-<label>_photo.jpg
 
-        task_label    = 'acute';
         ses_label     = strcat('ses-',upper(replace(deblank(metadata.sit_name),' ','')));
+        task_label    = strcat('task-',strtrim(metadata.task_name),' ','');
+        metadata.hour = header.hour; metadata.min = header.min; metadata.sec = header.sec; % this is needed for acq_time in scans.tsv
 
         %subject dir
         sub_dir       = fullfile(proj_dir,sub_label);
         ses_dir       = fullfile(proj_dir,sub_label,ses_label);
         ieeg_dir      = fullfile(proj_dir,sub_label,ses_label,'ieeg');
+        ieeg_file     = strcat(sub_label,'_',ses_label,'_',task_label);
         source_dir    = fullfile(proj_dir,'sourcedata',sub_label,ses_label,'ieeg');
      
         mydirMaker(sub_dir);
@@ -114,7 +107,7 @@ try
         %otherwise remove tsv,json,eeg,vhdr,trc,vmrk
         ieeg_files = dir(ieeg_dir);
         
-        if(numel(ieeg_files)>2)
+        if contains([ieeg_files(:).name],ieeg_file)%(numel(ieeg_files)>2)
         
             delete(fullfile(ieeg_dir,'*.tsv'))  ;
             delete(fullfile(ieeg_dir,'*.json')) ;
@@ -124,18 +117,30 @@ try
             delete(fullfile(ieeg_dir,'*.TRC'))  ;            
         
         end
-
-        fieeg_name = strcat(sub_label,'_',ses_label,'_','task-',task_label,'_','ieeg',exte);
-        fieeg_json_name = strcat(sub_label,'_',ses_label,'_','task-',task_label,'_','ieeg','.json');
-        fchs_name = strcat(sub_label,'_',ses_label,'_','task-',task_label,'_','channels','.tsv');
-        fevents_name = strcat(sub_label,'_',ses_label,'_','task-',task_label,'_','events','.tsv');
+        
+        % delete scans.tsv if all files in a patient folder are run, 
+        % with the first file, scans.tsv can be deleted to run it again correctly
+        if runall == 1  && filenum == 1 
+                scans_files = dir(sub_dir);
+                
+                if contains([scans_files(:).name],'_scans.tsv')
+                    
+                    delete(fullfile(sub_dir,[extractBefore(ieeg_file,'_ses') '_scans.tsv']))  ;
+                    
+                end
+        end
+        
+        % make names of files to be constructed
+        fieeg_name = strcat(sub_label,'_',ses_label,'_',task_label,'_','ieeg',exte);
+        fieeg_json_name = strcat(sub_label,'_',ses_label,'_',task_label,'_','ieeg','.json');
+        fchs_name = strcat(sub_label,'_',ses_label,'_',task_label,'_','channels','.tsv');
+        fevents_name = strcat(sub_label,'_',ses_label,'_',task_label,'_','events','.tsv');
         felec_name = strcat(sub_label,'_',ses_label,'_','electrodes','.tsv');
         fcoords_name = strcat(sub_label,'_',ses_label,'_','coordsystem','.json');
         fpic_name = strcat(sub_label,'_',ses_label,'_','photo','.jpg');
-        
-        
-            
-         
+        fscans_name = strcat(sub_label,'_scans','.tsv');
+
+        %% create Brainvision format from TRC
         % file ieeg of the recording
         copyfile(filename,fullfile(source_dir,fieeg_name));
 
@@ -143,78 +148,80 @@ try
         fileVHDR = fullfile(ieeg_dir,fieeg_name);
         fileVHDR = replace(fileVHDR,'.TRC','.vhdr');
 
-        %% create Brainvision format from TRC
+        temp = [];
+        temp.dataset    = fileTRC;
+        temp.continuous = 'yes';
+        data2write     = ft_preprocessing(temp);
 
-        cfg = [];
-        cfg.dataset    = fileTRC;
-        cfg.continuous = 'yes';
-        data2write     = ft_preprocessing(cfg);
+        temp = [];
+        temp.outputfile                  = fileVHDR;
 
-        cfg = [];
-        cfg.outputfile                  = fileVHDR;
-
-
-        
-       
-        cfg.writejson = 'no';
-        cfg.ieeg.writesidecar     = 'no';
-        cfg.writetsv  = 'no'; 
-        cfg.datatype  = 'ieeg';
+        temp.mri.writesidecar       = 'no';
+        temp.meg.writesidecar        = 'no';
+        temp.eeg.writesidecar        = 'no';
+        temp.ieeg.writesidecar       = 'no';
+        temp.channels.writesidecar   = 'no';
+        temp.events.writesidecar     = 'no';
               
-        data2bids(cfg, data2write)
+        data2bids(temp, data2write)
+        cfg.outputfile = fileVHDR;
         
-        % delete the json created by fieldtrip in order to create the
-        % custom one
-        delete(replace(cfg.outputfile,'vhdr','json'))
-       
+
+% 
+% 
+%         %% write dataset descriptor
+%         create_datasetDesc(proj_dir)
+
         %% create json sidecar for ieeg file
-        cfg                             = [];
-        cfg.ieeg                        = struct;
-        cfg.channels                    = struct;
-        cfg.electrodes                  = struct;
-        cfg.coordsystem                 = struct;
-
-        cfg.outputfile                  = fileVHDR;
-
-        cfg.TaskName                    = task_label;
-        cfg.InstitutionName             = 'University Medical Center Utrecht';
-        cfg.InstitutionAddress          = 'Heidelberglaan 100, 3584 CX Utrecht';
-        cfg.Manufacturer                = 'Micromed';
-        cfg.ManufacturersModelName      = sprintf('Acqui.eq:%i  File_type:%i',header.acquisition_eq,header.file_type);
-        cfg.DeviceSerialNumber          = '';
-        cfg.SoftwareVersions            = header.Header_Type;
-
-
-
-
-
-        % create _channels.tsv
-
-      
-        % create _electrodes.tsv
-        % we don't have a position of the electrodes, anyway we are keeping this
-        % file for BIDS compatibility
-
-
-        json_sidecar_and_ch_and_ele_tsv(header,metadata,cfg)
-
-
+        
+        cfg = create_jsonsidecar(cfg,metadata,header,fieeg_json_name);
+        
+        %% create _channels.tsv
+        
+        create_channels_tsv(cfg,metadata,header,fchs_name)
+        
+        %% create _electrodes.tsv
+        
+        create_electrodes_tsv(cfg,metadata,header,felec_name)
+        
         %% create coordsystem.json
         cfg.coordsystem.iEEGCoordinateSystem                = 'pixel'   ;
-        cfg.coordsystem.iEEGCoordinateUnits                 = 'pixel'      ;
+        cfg.coordsystem.iEEGCoordinateUnits                 = 'pixel'   ;
         cfg.coordsystem.iEEGCoordinateProcessingDescription = 'none'    ;
         cfg.coordsystem.IntendedFor                         =  fpic_name;                
 
         json_coordsystem(cfg)
-
+        
         %% move photo with the proper naming into the /ieeg folder
-
+        
         %% create _events.tsv
-        write_events_tsv(metadata,cfg);
-
-
+        
+        events_tsv = write_events_tsv(metadata,cfg);
+        
+        %% write scans-file
+        
+        write_scans_tsv(cfg,metadata,events_tsv,fscans_name,fieeg_json_name)
+        
+        %% write participants-file
+        
+        write_participants_tsv(cfg,header,metadata)
+               
         %% write dataset descriptor
-        create_datasetDesc(proj_dir)
+        
+        create_datasetDesc(proj_dir,sub_label)
+
+        %% write event descriptor
+        
+        create_eventDesc(extractBefore(cfg.outputfile,'task'))
+        
+        %% write scans descriptor
+        create_scansDesc([extractBefore(cfg.outputfile,'ses-'),sub_label,'_'])
+        
+        %% write electrodes descriptor 
+        create_elecDesc(extractBefore(cfg.outputfile,'task'))
+        
+        %% write participants descriptor
+        create_participantsDesc(proj_dir)
 
     else 
         %% errors in parsing the data
@@ -232,31 +239,6 @@ catch ME
     
 end
 
-
-%% create dataset descriptor
-function create_datasetDesc(proj_dir)
-
-ddesc_json.Name               = 'RESPECT' ;
-ddesc_json.BIDSVersion        = 'BEP010';
-ddesc_json.License            = 'Not licenced yet';
-ddesc_json.Authors            = {'Demuru M.,', 'Zweiphenning W.J.E.,', 'van Blooijs D.,', 'Leijten F.S.S.,', 'Zijlmans G.J.M.'};
-ddesc_json.Acknowledgements   = 'D''angremont E.,  Wassenaar M.';
-ddesc_json.HowToAcknowledge   = 'possible paper to quote' ;
-ddesc_json.Funding            = {'Epi-Sign Project'} ;  
-ddesc_json.ReferencesAndLinks = {'articles and/or links'};
-ddesc_json.DatasetDOI         = 'DOI of the dataset if online'; 
-
-
-if ~isempty(ddesc_json)
-    
-    filename = fullfile(proj_dir,'dataset_description.json');
-    if isfile(filename)
-        existing = read_json(filename);
-    else
-        existing = [];
-    end
-    write_json(filename, mergeconfig(existing, ddesc_json))
-end
 
 
 
